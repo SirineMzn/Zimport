@@ -11,14 +11,14 @@ from io import StringIO
 import io
 
 
-# Clé api openai stockée dans les secrets 
+# Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["openai_api_key"]
 
 # Initialisation de l'état de session Streamlit
 if "id" not in st.session_state:
     st.session_state.id = uuid.uuid4()
     st.session_state.docs_loaded = False
-    st.session_state.file_uploaded = False  # État du téléchargement de fichier
+
 session_id = st.session_state.id
 # Augmente la limite de taille de champ
 max_int = sys.maxsize
@@ -245,103 +245,97 @@ def display_correction_table(malformed_rows, header, saines):
         st.success("No malformed rows detected!")
         return None
 
-# Conteneur temporaire pour l'uploader
-file_uploader_container = st.empty()
-# Uploader de fichier avec gestion de l'état
-if not st.session_state.file_uploaded:
-    with file_uploader_container:
-        uploaded_file = st.file_uploader("Please upload a CSV or Text file only", type=["csv", "txt"])
+
+# Uploader de fichier Excel
+uploaded_file= st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
+if uploaded_file :
+    content = uploaded_file.read()
+
+    # Détecter l'encodage
+    try:
+        decoded_content, encodage = open_file_with_auto_and_manual_encodings(content)
+        st.write(f"Encodage détecté et utilisé : {encodage}")
+    except ValueError as e:
+        st.error(f"Erreur d'encodage : {e}")
+        st.stop()
+    # détécter le caractère de fin de ligne
     
-    if uploaded_file:
-        st.session_state.file_uploaded = True
-        file_uploader_container.empty()  # Masquer l'uploader après le téléchargement
-        content = uploaded_file.read()
+    newlines = {'\n': decoded_content.count('\n'), '\r\\n': decoded_content.count('\r\n'), '\r': decoded_content.count('\r')}
+    for key, value in newlines.items():
+        if value != 0 :
+            new_line = key
+    number_lines = newlines[new_line]
+        # Appeler la fonction pour détecter le délimiteur et obtenir le contenu modifié si nécessaire
+    delimiter, sep_inexistant, modified_content = detect_delimiter(content, encodage)
 
-        # Détecter l'encodage
-        try:
-            decoded_content, encodage = open_file_with_auto_and_manual_encodings(content)
-            st.write(f"Succeded to encoding with : {encodage}")
-        except ValueError as e:
-            st.error(f"Failed to encode : {e}")
-            st.stop()
-        # détécter le caractère de fin de ligne
+    # Vérifier si une conversion est nécessaire
+    extension = verifier_extension_fichier(uploaded_file.name)
+
+    # Si le fichier est un CSV, le convertir en TXT
+    if extension == '.csv':
+        # Utiliser `modified_content` pour la conversion
+        texte = convert_csv_to_txt(modified_content, sep_inexistant or delimiter, encodage, new_line)
+        delimiter = sep_inexistant or delimiter
+    else:
+        # Sinon, utiliser le contenu tel quel
+        texte = modified_content
+
+
+
+    # Découper le contenu en lignes
+    lines = modified_content.splitlines()
+
+    # Initialiser les listes pour les lignes "saines" et "malades"
+    saines = []
+    malades = []
+    store_list = []  # Stocke les lignes incomplètes pour compléter les lignes suivantes
+
+    # Lire la première ligne pour obtenir le nombre attendu de colonnes
+    first_line = lines[0].split(delimiter)
+    saines.append(first_line)  # Ajouter la première ligne aux "saines"
+    number = len(first_line)  # Nombre attendu de colonnes
+    most_common_count = number  # Utilisez la première ligne comme référence pour la structure
+
+    # Parcourir le reste des lignes
+    for raw_line in lines[1:]:
+        # Diviser la ligne en colonnes en utilisant le délimiteur
+        line = raw_line.split(delimiter)
         
-        newlines = {'\n': decoded_content.count('\n'), '\r\\n': decoded_content.count('\r\n'), '\r': decoded_content.count('\r')}
-        for key, value in newlines.items():
-            if value != 0 :
-                new_line = key
-        number_lines = newlines[new_line]
-            # Appeler la fonction pour détecter le délimiteur et obtenir le contenu modifié si nécessaire
-        delimiter, sep_inexistant, modified_content = detect_delimiter(content, encodage)
-
-        # Vérifier si une conversion est nécessaire
-        extension = verifier_extension_fichier(uploaded_file.name)
-
-        # Si le fichier est un CSV, le convertir en TXT
-        if extension == '.csv':
-            # Utiliser `modified_content` pour la conversion
-            texte = convert_csv_to_txt(modified_content, sep_inexistant or delimiter, encodage, new_line)
-            delimiter = sep_inexistant or delimiter
-        else:
-            # Sinon, utiliser le contenu tel quel
-            texte = modified_content
-
-
-
-        # Découper le contenu en lignes
-        lines = modified_content.splitlines()
-
-        # Initialiser les listes pour les lignes "saines" et "malades"
-        saines = []
-        malades = []
-        store_list = []  # Stocke les lignes incomplètes pour compléter les lignes suivantes
-
-        # Lire la première ligne pour obtenir le nombre attendu de colonnes
-        first_line = lines[0].split(delimiter)
-        saines.append(first_line)  # Ajouter la première ligne aux "saines"
-        number = len(first_line)  # Nombre attendu de colonnes
-        most_common_count = number  # Utilisez la première ligne comme référence pour la structure
-
-        # Parcourir le reste des lignes
-        for raw_line in lines[1:]:
-            # Diviser la ligne en colonnes en utilisant le délimiteur
-            line = raw_line.split(delimiter)
+        # Si la ligne dépasse le nombre de colonnes attendu, on la stocke dans malades
+        if len(line) > most_common_count:
+            malades.append(line)
+        
+        # Si la ligne a le bon nombre de colonnes, on l'ajoute directement aux "saines"
+        elif len(line) == number:
+            saines.append(line)
+        
+        # Si la ligne a moins de colonnes que le nombre attendu
+        elif len(line) < most_common_count:
+            if store_list:
+                # Si une ligne est stockée, on la combine avec la ligne actuelle
+                next_line = line
+                line = store_list
+            else:
+                # Si aucune ligne n'est en mémoire, on essaie d'en obtenir une nouvelle
+                try:
+                    next_line = lines[lines.index(raw_line) + 1].split(delimiter)
+                except IndexError:
+                    # Si on atteint la fin du fichier, on sort de la boucle
+                    break
             
-            # Si la ligne dépasse le nombre de colonnes attendu, on la stocke dans malades
-            if len(line) > most_common_count:
-                malades.append(line)
-            
-            # Si la ligne a le bon nombre de colonnes, on l'ajoute directement aux "saines"
-            elif len(line) == number:
-                saines.append(line)
-            
-            # Si la ligne a moins de colonnes que le nombre attendu
-            elif len(line) < most_common_count:
-                if store_list:
-                    # Si une ligne est stockée, on la combine avec la ligne actuelle
-                    next_line = line
-                    line = store_list
-                else:
-                    # Si aucune ligne n'est en mémoire, on essaie d'en obtenir une nouvelle
-                    try:
-                        next_line = lines[lines.index(raw_line) + 1].split(delimiter)
-                    except IndexError:
-                        # Si on atteint la fin du fichier, on sort de la boucle
-                        break
-                
-                if next_line:
-                    # Combinaison de la fin de la ligne actuelle et du début de la ligne suivante
-                    milieu = line[-1] + next_line[0]
-                    result_line = line[:-1] + [milieu] + next_line[1:]
+            if next_line:
+                # Combinaison de la fin de la ligne actuelle et du début de la ligne suivante
+                milieu = line[-1] + next_line[0]
+                result_line = line[:-1] + [milieu] + next_line[1:]
 
-                    # Enregistrement ou ajustement de la ligne combinée en fonction de la taille attendue
-                    if len(result_line) == most_common_count:
-                        saines.append(result_line)  # Ligne complète, enregistrée dans saines
-                        store_list = []  # Réinitialiser le stockage
-                    elif len(result_line) < most_common_count:
-                        store_list = result_line  # Stocker pour la prochaine itération
-                    elif len(result_line) > most_common_count:
-                        malades.append(result_line)  # Ligne trop longue, enregistrée dans malades
-                    next_line = None
-        corrected_df=display_correction_table(malades, first_line,saines)
+                # Enregistrement ou ajustement de la ligne combinée en fonction de la taille attendue
+                if len(result_line) == most_common_count:
+                    saines.append(result_line)  # Ligne complète, enregistrée dans saines
+                    store_list = []  # Réinitialiser le stockage
+                elif len(result_line) < most_common_count:
+                    store_list = result_line  # Stocker pour la prochaine itération
+                elif len(result_line) > most_common_count:
+                    malades.append(result_line)  # Ligne trop longue, enregistrée dans malades
+                next_line = None
+    corrected_df=display_correction_table(malades, first_line,saines)
 
