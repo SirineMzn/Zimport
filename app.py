@@ -230,31 +230,31 @@ def display_correction_table(malformed_rows, header, saines):
                 rows_to_validate = sorted(set(i for i, _ in st.session_state.modified_cells))
                 valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
 
+
                 for row_index in rows_to_validate:
-                    # Comparer la longueur totale de la ligne avec celle de l'en-tête
                     total_fields_count = len(corrected_df.iloc[row_index, :len(header)])
-                            # Vérifier que les champs au-delà de l'en-tête sont vides
                     extra_fields_empty = all(
-                        field == "" or pd.isna(field)
+                        str(field).strip() == "" or pd.isna(field)
                         for field in corrected_df.iloc[row_index, len(header):]
                     )
-                    if total_fields_count == len(header)  and extra_fields_empty:
+
+                    # Debug affichage des conditions
+
+                    if total_fields_count == len(header) and extra_fields_empty:
                         valid_row = corrected_df.iloc[row_index, :len(header)].tolist()
                         st.session_state.corrected.append(valid_row)
-                        
-                        # Ajouter l'index à la liste pour suppression ultérieure
                         valid_rows.append(row_index)
+                        st.sidebar.success(f"Row {row_index+1} validated successfully!")
                     else:
                         st.sidebar.write(f"Row {row_index+1} contains filled extra columns and cannot be validated.")
                 
                 # Supprimer toutes les lignes validées en une seule fois
                 if valid_rows:
+                    st.sidebar.write(f"Validated rows: {valid_rows}")
                     st.session_state.cell_current.drop(valid_rows, inplace=True)
                     st.session_state.cell_current.reset_index(drop=True, inplace=True)
+                    st.rerun()  # Restart to force update
                 
-                # Réinitialiser modified_cells après validation                
-                st.rerun()
-            
         return st.session_state.cell_current, st.session_state.corrected
     else:
         st.success("No malformed rows detected!")
@@ -305,55 +305,64 @@ if uploaded_file :
     saines = []
     malades = []
     store_list = []  # Stocke les lignes incomplètes pour compléter les lignes suivantes
-
+    logs = []
     # Lire la première ligne pour obtenir le nombre attendu de colonnes
     first_line = lines[0].split(delimiter)
-    saines.append(first_line)  # Ajouter la première ligne aux "saines"
     number = len(first_line)  # Nombre attendu de colonnes
     most_common_count = number  # Utilisez la première ligne comme référence pour la structure
 
-    # Parcourir le reste des lignes
-    for raw_line in lines[1:]:
-        # Diviser la ligne en colonnes en utilisant le délimiteur
-        line = raw_line.split(delimiter)
-        
-        # Si la ligne dépasse le nombre de colonnes attendu, on la stocke dans malades
-        if len(line) > most_common_count:
+
+    # Initialiser un index explicite
+    index = 1  # Commencez après l'en-tête
+
+    # Parcourir les lignes restantes
+    while index < len(lines):
+        raw_line = lines[index]
+        line = raw_line.split(delimiter)  # Diviser chaque ligne selon le délimiteur
+
+        if len(line) > number:
+            # Ajouter aux lignes indisponibles si trop de champs
             malades.append(line)
-        
-        # Si la ligne a le bon nombre de colonnes, on l'ajoute directement aux "saines"
+            index += 1  # Passer à la ligne suivante
+
         elif len(line) == number:
+            # Ajouter aux lignes saines si le nombre de champs correspond
             saines.append(line)
-        
-        # Si la ligne a moins de colonnes que le nombre attendu
-        elif len(line) < most_common_count:
+            index += 1  # Passer à la ligne suivante
+
+        elif len(line) < number:
+            # Si une ligne est plus courte, essayer de la compléter
             if store_list:
-                # Si une ligne est stockée, on la combine avec la ligne actuelle
                 next_line = line
                 line = store_list
             else:
-                # Si aucune ligne n'est en mémoire, on essaie d'en obtenir une nouvelle
-                try:
-                    next_line = lines[lines.index(raw_line) + 1].split(delimiter)
-                except IndexError:
-                    # Si on atteint la fin du fichier, on sort de la boucle
-                    break
-            
+                # Continuer avec la ligne suivante si `store_list` est vide
+                next_index = index + 1
+                if next_index < len(lines):
+                    next_line = lines[next_index].split(delimiter)
+                    index += 1  # On a utilisé la ligne suivante, donc incrémenter
+                else:
+                    next_line = []
+
+            # Fusionner la dernière colonne de la ligne actuelle avec la première colonne de la suivante
             if next_line:
-                # Combinaison de la fin de la ligne actuelle et du début de la ligne suivante
                 milieu = line[-1] + next_line[0]
                 result_line = line[:-1] + [milieu] + next_line[1:]
+            else:
+                result_line = line
 
-                # Enregistrement ou ajustement de la ligne combinée en fonction de la taille attendue
-                if len(result_line) == most_common_count:
-                    saines.append(result_line)  # Ligne complète, enregistrée dans saines
-                    store_list = []  # Réinitialiser le stockage
-                elif len(result_line) < most_common_count:
-                    store_list = result_line  # Stocker pour la prochaine itération
-                elif len(result_line) > most_common_count:
-                    malades.append(result_line)  # Ligne trop longue, enregistrée dans malades
-                next_line = None
-                # Display `saines` to confirm rows were added
+            # Vérifier le résultat après fusion
+            if len(result_line) == number:
+                logs.append(result_line)
+                saines.append(result_line)
+                store_list = []
+            elif len(result_line) < number:
+                store_list = result_line
+            elif len(result_line) > number:
+                malades.append(result_line)
+
+            # Toujours avancer l'index après le traitement
+            index += 1
     corrected_df,corrected=display_correction_table(malades, first_line,saines)
     if corrected :
         # Convertir les lignes "saines" en DataFrame
