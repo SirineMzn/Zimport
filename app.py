@@ -135,7 +135,6 @@ def detect_delimiter(encoded_content, encoding):
 
     return probable_delimiter, separateur_inexistant, modified_content
 
-
 def display_correction_table(malformed_rows, header, saines):
     """
     Displays an interactive table of malformed rows for correction, with validation and restore buttons.
@@ -143,6 +142,7 @@ def display_correction_table(malformed_rows, header, saines):
     """
     
     if malformed_rows:
+        
         st.write("## Detected malformed rows")
         
         max_columns = max(len(row) for row in malformed_rows)
@@ -156,16 +156,27 @@ def display_correction_table(malformed_rows, header, saines):
         
         # Create DataFrame for display
         df_display = pd.DataFrame(adjusted_rows, columns=extended_header)
-
+        if df_display.empty:
+            st.warning("The table is empty and cannot be displayed.")
+            return None, None
         # Initialize original values and modified state if not already done
         if 'cell_initial' not in st.session_state:
-            st.session_state.cell_initial = {(i, j): df_display.iat[i, j] for i in range(df_display.shape[0]) for j in range(df_display.shape[1])}
-            st.session_state.cell_current = df_display.copy()
-            st.session_state.modified_cells = []  # List to store modified cells
-        
+# Vérifie si le tableau n'est pas vide avant d'initialiser les valeurs
+            
+            if not df_display.empty:
+                st.session_state.cell_initial = {(i, j): df_display.iat[i, j] for i in range(df_display.shape[0]) for j in range(df_display.shape[1])}
+                st.session_state.cell_current = df_display.copy()
+
+                st.session_state.modified_cells = [(0, 0)]  # Initialisation par défaut si le tableau n'est pas vide
+            else:
+                return None, None# Liste vide si le tableau est vide
+            
+            st.session_state.corrected = []
+        if 'validated_rows' not in st.session_state:
+            st.session_state.validated_rows = []
+
         # Display the interactive table
         corrected_df = st.data_editor(st.session_state.cell_current, use_container_width=True)
-        
         # Detect changes to record modified cells
         for i in range(corrected_df.shape[0]):
             for j in range(corrected_df.shape[1]):
@@ -173,39 +184,28 @@ def display_correction_table(malformed_rows, header, saines):
                 if current_value != st.session_state.cell_current.iat[i, j]:
                     st.session_state.modified_cells.append((i, j))
                     st.session_state.cell_current.iat[i, j] = current_value  # Update modified value
-
-        # Show modified cells and allow selection in the sidebar
-        if st.session_state.modified_cells:
-            cell_options = [f"Row {i+1}, Column {j+1}" for i, j in st.session_state.modified_cells]
-            selected_cells = st.sidebar.multiselect("Select cells to restore", options=cell_options)
-
-            # Map the selection to original indices
-            selected_indices = [(st.session_state.modified_cells[cell_options.index(opt)]) for opt in selected_cells]
-
-            # Button to restore selected cells
-            if st.sidebar.button("Restore"):
-                for i, j in selected_indices:
-                    corrected_df.iat[i, j] = st.session_state.cell_initial[(i, j)]
-                    st.session_state.cell_current.iat[i, j] = st.session_state.cell_initial[(i, j)]
-                st.sidebar.write("Selected cells were restored.")
-                # Update the list of modified cells
-                st.session_state.modified_cells = [cell for cell in st.session_state.modified_cells if cell not in selected_indices]
-                st.rerun()
-        else:
-            st.sidebar.write("No modified cells to restore.")
-
         # Row and column selection inputs in the sidebar
-        row_selection = st.sidebar.text_input("Enter multiple/single row numbers.")
-        col_selection = st.sidebar.multiselect("Select columns", options=list(range(df_display.shape[1])), format_func=lambda x: extended_header[x])
+        if not corrected_df.empty:
+            row_selection = st.sidebar.text_input("Enter multiple/single row numbers.")
+            col_selection = st.sidebar.multiselect(
+                "Select columns", 
+                options=list(range(df_display.shape[1])), 
+                format_func=lambda x: extended_header[x]
+            )
 
-        # Convert input text to index lists
-        selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
+            # Convert input text to index lists
+            selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
 
-        # Verify selected rows exist
-        max_index = corrected_df.shape[0] - 1
-        if any(row_index > max_index for row_index in selected_rows):
-            st.sidebar.error("No more data to edit.")
-            return  # Exit function if a selected row does not exist
+            # Verify selected rows exist
+            max_index = corrected_df.shape[0] - 1
+            if any(row_index > max_index for row_index in selected_rows):
+                st.sidebar.error("No more data to edit.")
+        else:
+            st.sidebar.write("The table is empty. No operations can be performed.")
+            selected_rows = []
+            col_selection = []
+            return st.session_state.cell_current, st.session_state.corrected
+ 
 
         # Merge selected cells with the next cell
         if st.sidebar.button("Merge"):
@@ -224,26 +224,42 @@ def display_correction_table(malformed_rows, header, saines):
                     st.session_state.cell_current.iloc[i, j:] = corrected_df.iloc[i, j+1:].tolist() + [""]
             st.sidebar.write("Selected cells were deleted.")
             st.rerun()  # Restart to force update
-        
-        # Validation button to add selected rows to "saines"
-        if st.sidebar.button("Validate"):
-            for row_index in selected_rows:
-                # Check if extra columns are empty
-                extra_columns_empty = corrected_df.iloc[row_index, len(header):].eq("").all()
+        # Validation des lignes modifiées
+        if st.sidebar.button("Validation"):
+            if st.session_state.modified_cells or len(st.session_state.cell_current) == 1:
+                rows_to_validate = sorted(set(i for i, _ in st.session_state.modified_cells))
+                valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
+
+                for row_index in rows_to_validate:
+                    # Comparer la longueur totale de la ligne avec celle de l'en-tête
+                    total_fields_count = len(corrected_df.iloc[row_index, :len(header)])
+                            # Vérifier que les champs au-delà de l'en-tête sont vides
+                    extra_fields_empty = all(
+                        field == "" or pd.isna(field)
+                        for field in corrected_df.iloc[row_index, len(header):]
+                    )
+                    if total_fields_count == len(header)  and extra_fields_empty:
+                        valid_row = corrected_df.iloc[row_index, :len(header)].tolist()
+                        st.session_state.corrected.append(valid_row)
+                        
+                        # Ajouter l'index à la liste pour suppression ultérieure
+                        valid_rows.append(row_index)
+                    else:
+                        st.sidebar.write(f"Row {row_index+1} contains filled extra columns and cannot be validated.")
                 
-                if extra_columns_empty:
-                    saines.append(corrected_df.iloc[row_index, :len(header)].tolist())  # Add only columns in header
-                    st.session_state.cell_current = st.session_state.cell_current.drop(row_index).reset_index(drop=True)
-                    st.sidebar.write(f"Row {row_index+1} validated and added to 'saines'.")
-                else:
-                    st.sidebar.write(f"Row {row_index+1} contains filled extra columns and cannot be validated.")
-
-            st.rerun()  # Update the table display after validation
-
-        return st.session_state.cell_current
+                # Supprimer toutes les lignes validées en une seule fois
+                if valid_rows:
+                    st.session_state.cell_current.drop(valid_rows, inplace=True)
+                    st.session_state.cell_current.reset_index(drop=True, inplace=True)
+                
+                # Réinitialiser modified_cells après validation                
+                st.rerun()
+            
+        return st.session_state.cell_current, st.session_state.corrected
     else:
         st.success("No malformed rows detected!")
-        return None
+        return None, None
+
 
 
 # Uploader de fichier Excel
@@ -337,5 +353,30 @@ if uploaded_file :
                 elif len(result_line) > most_common_count:
                     malades.append(result_line)  # Ligne trop longue, enregistrée dans malades
                 next_line = None
-    corrected_df=display_correction_table(malades, first_line,saines)
+                # Display `saines` to confirm rows were added
+    corrected_df,corrected=display_correction_table(malades, first_line,saines)
+    if corrected :
+        # Convertir les lignes "saines" en DataFrame
+        df_Pi = pd.DataFrame(corrected, columns=first_line)
+        df_saines = pd.DataFrame(saines, columns=first_line)
+        df_final = pd.concat([df_saines,df_Pi],axis=0)
+            # Récupérer le nom de fichier original sans extension
+        base_file_name = remove_file_extension(uploaded_file.name)
 
+            # Générer un fichier CSV téléchargeable avec le nom original
+        csv_data = df_final.to_csv(index=False).encode(encodage)
+        st.download_button(
+                label="Download your file as CSV",
+                data=csv_data,
+                file_name=f"{base_file_name}_saines.csv",
+                mime="text/csv"
+            )
+
+            # Générer un fichier TXT téléchargeable avec le nom original
+        txt_data = df_final.to_csv(index=False, sep=delimiter).encode(encodage)
+        st.download_button(
+                label="Download your file as TXT",
+                data=txt_data,
+                file_name=f"{base_file_name}_saines.txt",
+                mime="text/plain"
+            )
