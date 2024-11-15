@@ -221,7 +221,7 @@ def display_correction_table(malformed_rows, header,types):
             selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
 
             # Verify selected rows exist
-            max_index = corrected_df.shape[0] - 1
+            max_index = corrected_df.shape[0] 
             if any(row_index > max_index for row_index in selected_rows):
                 st.sidebar.error("No more data to edit.")
         else:
@@ -251,10 +251,10 @@ def display_correction_table(malformed_rows, header,types):
         # Validation des lignes modifiées
         if st.sidebar.button("Validation"):
             if st.session_state.modified_cells or len(st.session_state.cell_current) == 1:
-                rows_to_validate = sorted(set(i for i, _ in st.session_state.modified_cells))
+                
                 valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
 
-                for row_index in rows_to_validate:
+                for row_index in selected_rows:
                     total_fields_count = len(corrected_df.iloc[row_index, :len(header)])
                     extra_fields_empty = all(
                         str(field).strip() == "" or pd.isna(field)
