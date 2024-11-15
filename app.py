@@ -175,7 +175,8 @@ def display_correction_table(malformed_rows, header,types):
             for col, type_ in zip(extended_header, extended_types)
         ]
         df_display.columns = merged_headers  # Appliquer les en-têtes fusionnés
-
+        # Décaler l'index pour commencer à 1
+        df_display.index = df_display.index + 1
         if df_display.empty:
             st.warning("The table is empty and cannot be displayed.")
             return None, corrected
@@ -185,7 +186,7 @@ def display_correction_table(malformed_rows, header,types):
             if not df_display.empty:
                 st.session_state.cell_initial = {(i, j): df_display.iat[i, j] for i in range(df_display.shape[0]) for j in range(df_display.shape[1])}
                 st.session_state.cell_current = df_display.copy()
-                st.session_state.modified_cells = [(0, 0)]  # Initialisation par défaut si le tableau n'est pas vide
+                st.session_state.modified_cells = [(1,1)]  # Initialisation par défaut si le tableau n'est pas vide
             else:
                 return None, None  # Retourne None si le tableau est vide
             
@@ -218,34 +219,65 @@ def display_correction_table(malformed_rows, header,types):
             st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited rows to storage.</p>', unsafe_allow_html=True)
             # Convert input text to index lists
             selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
-
-            # Verify selected rows exist
-            max_index = corrected_df.shape[0] 
-            if any(row_index > max_index for row_index in selected_rows):
-                st.sidebar.error("No more data to edit.")
         else:
             st.sidebar.write("The table is empty. No operations can be performed.")
             selected_rows = []
             col_selection = []
             return st.session_state.cell_current, st.session_state.corrected
-
-        # Merge selected cells with the next cell
         if st.sidebar.button("Merge"):
-            for i in selected_rows:
-                for j in col_selection:
-                    if j < corrected_df.shape[1] - 1:  # Check if merge is possible
-                        st.session_state.cell_current.iat[i, j] = str(corrected_df.iat[i, j]) + " " + str(corrected_df.iat[i, j + 1])
-                        st.session_state.cell_current.iloc[i, j+1:] = corrected_df.iloc[i, j+2:].tolist() + [""]
-            st.sidebar.write("Selected cells were merged.")
-            st.rerun()  # Restart to force update
+            current_indices = st.session_state.cell_current.index.tolist()  # Récupérer les indices actuels
+
+            for row_index in selected_rows:
+                if row_index not in current_indices:
+                    st.sidebar.error(f"Row {row_index} is invalid or has been deleted.")
+                    continue
+                
+                # Convertir l'index sélectionné en position réelle
+                pos = current_indices.index(row_index)
+
+                for col_index in col_selection:
+                    if col_index < st.session_state.cell_current.shape[1] - 1:  # Vérifier que la fusion est possible
+                        try:
+                            # Effectuer la fusion
+                            st.session_state.cell_current.iat[pos, col_index] = (
+                                str(st.session_state.cell_current.iat[pos, col_index]) +
+                                " " +
+                                str(st.session_state.cell_current.iat[pos, col_index + 1])
+                            )
+                            # Décaler les cellules vers la gauche
+                            st.session_state.cell_current.iloc[pos, col_index + 1:] = (
+                                st.session_state.cell_current.iloc[pos, col_index + 2:].tolist() + [""]
+                            )
+                        except IndexError:
+                            st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_index}.")
+                            continue
+            st.sidebar.success("Merge completed.")
+            st.rerun()  # Redémarrer pour appliquer les modifications
+
 
         # Delete selected cells and shift remaining cells accordingly
         if st.sidebar.button("Delete"):
-            for i in selected_rows:
-                for j in col_selection:
-                    st.session_state.cell_current.iloc[i, j:] = corrected_df.iloc[i, j+1:].tolist() + [""]
-            st.sidebar.write("Selected cells were deleted.")
-            st.rerun()  # Restart to force update
+            current_indices = st.session_state.cell_current.index.tolist()  # Récupérer les indices actuels
+
+            for row_index in selected_rows:
+                if row_index not in current_indices:
+                    st.sidebar.error(f"Row {row_index} is invalid or has been deleted.")
+                    continue
+
+                # Convertir l'index sélectionné en position réelle
+                pos = current_indices.index(row_index)
+
+                for col_index in col_selection:
+                    try:
+                        # Supprimer la cellule et décaler les cellules suivantes vers la gauche
+                        st.session_state.cell_current.iloc[pos, col_index:] = (
+                            st.session_state.cell_current.iloc[pos, col_index + 1:].tolist() + [""]
+                        )
+                    except IndexError:
+                        st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_index}.")
+                        continue
+            st.sidebar.success("Delete completed.")
+            st.rerun()  # Redémarrer pour appliquer les modifications
 
         # Validation des lignes modifiées
         if st.sidebar.button("Validation"):
@@ -253,28 +285,43 @@ def display_correction_table(malformed_rows, header,types):
                 
                 valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
 
+                # Assurez-vous que les indices sélectionnés correspondent aux indices actuels
+                current_indices = st.session_state.cell_current.index.tolist()
+
                 for row_index in selected_rows:
-                    total_fields_count = len(corrected_df.iloc[row_index, :len(header)])
+                    if row_index not in current_indices:
+                        st.sidebar.warning(f"Ligne {row_index} invalide ou déjà supprimée.")
+                        continue
+
+                    # Convertir l'index sélectionné en position réelle
+                    pos = current_indices.index(row_index)
+
+                    total_fields_count = len(corrected_df.iloc[pos, :len(header)])
                     extra_fields_empty = all(
                         str(field).strip() == "" or pd.isna(field)
-                        for field in corrected_df.iloc[row_index, len(header):]
+                        for field in corrected_df.iloc[pos, len(header):]
                     )
 
                     if total_fields_count == len(header) and extra_fields_empty:
-                        valid_row = corrected_df.iloc[row_index, :len(header)].tolist()
+                        valid_row = corrected_df.iloc[pos, :len(header)].tolist()
                         st.session_state.corrected.append(valid_row)
-                        valid_rows.append(row_index)
-                        st.sidebar.success(f"Row {row_index+1} validated successfully!")
+                        valid_rows.append(pos)  # Utiliser la position, pas l'index
+                        st.sidebar.success(f"Row {row_index} validated successfully!")
                     else:
-                        st.sidebar.write(f"Row {row_index} contains filled extra columns and cannot be validated.")
-                
-                # Supprimer toutes les lignes validées en une seule fois
-                if valid_rows:
-                    st.sidebar.write(f"Validated rows: {valid_rows}")
-                    st.session_state.cell_current.drop(valid_rows, inplace=True)
-                    st.session_state.cell_current.reset_index(drop=True, inplace=True)
-                    st.rerun()  # Restart to force update
+                        st.sidebar.warning(f"Row {row_index} contains filled extra columns and cannot be validated.")
 
+                if valid_rows:
+                    # Convertir les positions en indices actuels
+                    rows_to_drop = st.session_state.cell_current.index[valid_rows]
+                    
+                    # Supprimer les lignes validées en utilisant les indices actuels
+                    st.session_state.cell_current.drop(rows_to_drop, inplace=True)
+
+                    # Réinitialiser l'index pour commencer à 1
+                    st.session_state.cell_current.reset_index(drop=True, inplace=True)
+                    st.session_state.cell_current.index = st.session_state.cell_current.index + 1
+
+                    st.rerun()  # Redémarrer pour forcer la mise à jour
         return st.session_state.cell_current,None
     else:
         st.success("No malformed rows detected!")
@@ -286,12 +333,14 @@ def display_correction_table(malformed_rows, header,types):
 # Uploader de fichier Excel
 uploaded_file= st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
 if uploaded_file :
-    content = uploaded_file.read()
+    extension = verifier_extension_fichier(uploaded_file.name)
+    base_file_name = remove_file_extension(uploaded_file.name)
 
+    content = uploaded_file.read()
+    del uploaded_file  # Supprimer le fichier pour libérer de l'espace
     # Détecter l'encodage
     try:
         decoded_content, encodage = open_file_with_auto_and_manual_encodings(content)
-        st.write(f"Encodage détecté et utilisé : {encodage}")
     except ValueError as e:
         st.error(f"Erreur d'encodage : {e}")
         st.stop()
@@ -306,7 +355,6 @@ if uploaded_file :
     delimiter, sep_inexistant, modified_content = detect_delimiter(content, encodage)
 
     # Vérifier si une conversion est nécessaire
-    extension = verifier_extension_fichier(uploaded_file.name)
 
     # Si le fichier est un CSV, le convertir en TXT
     if extension == '.csv':
@@ -336,7 +384,6 @@ if uploaded_file :
 
     # Initialiser les variables
     index = 1  # Commence après l'en-tête
-    new_index = 1
     store_list = []
     old_index_buffer = [] 
     saines_pi = [] # Liste tampon pour capturer tous les indices d'origine
@@ -358,16 +405,13 @@ if uploaded_file :
 
             old_index_buffer.clear()
             index += 1
-            new_index += 1
         elif len(line) == number:
             # Ligne correcte -> Ajouter à "saines"
             saines.append(line)
             nb_saines += 1
-            # Enregistrer le mapping old_index -> new_index
             old_index_buffer.clear()
 
             index += 1  # Passer à la ligne suivante
-            new_index += 1  # Incrémenter le nouvel index
 
         elif len(line) < number:
             # Ligne trop courte -> Fusionner avec la suivante
@@ -401,7 +445,6 @@ if uploaded_file :
                 old_index_buffer.clear()
 
                 store_list = []  # Réinitialiser le stockage temporaire
-                new_index += 1  # Incrémenter le nouvel index
             elif len(result_line) < number:
                 # Si encore trop courte -> Stocker pour une future fusion
                 store_list = result_line
@@ -432,7 +475,6 @@ if uploaded_file :
         df_saines = pd.DataFrame(saines, columns=first_line)
         df_final = pd.concat([df_saines,df_Pi,df_sigma],axis=0)
             # Récupérer le nom de fichier original sans extension
-        base_file_name = remove_file_extension(uploaded_file.name)
                 # Calculer les indices de départ
         start_index_pi = nb_saines + 1  # Commence après les lignes "saines"
         start_index_sigma = nb_saines + nb_saines_pi + 1  # Commence après "saines" et "saines_pi"
