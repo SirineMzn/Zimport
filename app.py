@@ -215,8 +215,7 @@ def display_correction_table(malformed_rows, header,types):
             st.sidebar.write('<p class="sidebar-text">After cells selection, click on Merge button to merge the selected cells with the next cell on the right.</p>', unsafe_allow_html=True)
             st.sidebar.write('<p class="sidebar-text">After cells selection, click on Delete button to delete the selected cells.</p>', unsafe_allow_html=True)
             st.sidebar.write('<p class="sidebar-text">Both Merge and Delete operations result in shifting the rest of the table to the left.</p>', unsafe_allow_html=True)
-            st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited row to storage.</p>', unsafe_allow_html=True)
-            st.sidebar.write('<p class="sidebar-text">Only one row can be validated at a time, even when multiple rows has been validated.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited rows to storage.</p>', unsafe_allow_html=True)
             # Convert input text to index lists
             selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
 
