@@ -134,42 +134,60 @@ def detect_delimiter(encoded_content, encoding):
             separateur_inexistant = '\t'
 
     return probable_delimiter, separateur_inexistant, modified_content
-
-def display_correction_table(malformed_rows, header, saines):
+def display_correction_table(malformed_rows, header,types):
     """
     Displays an interactive table of malformed rows for correction, with validation and restore buttons.
     Adds options to select multiple rows and columns to perform actions on selected cells.
     """
-    
+    # Ajout du CSS personnalisé pour réduire la taille du texte dans la barre latérale
+    st.markdown(
+        """
+        <style>
+        .sidebar-text {
+            font-size: 12px; /* Ajustez la taille selon vos besoins */
+            color: #333333; /* Facultatif: changez la couleur du texte */
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Afficher le texte avec une classe CSS personnalisée
     if malformed_rows:
-        
         st.write("## Detected malformed rows")
         
         max_columns = max(len(row) for row in malformed_rows)
         extended_header = header + [f"Unnamed_Column_{i+1}" for i in range(len(header), max_columns)]
-        
+        extended_types = types + [""] * (max_columns - len(header))  # Types pour les colonnes supplémentaires
+
         # Adjust rows to match the maximum number of columns and replace None with ""
         adjusted_rows = [
             [field if field is not None else "" for field in (row + [None] * (max_columns - len(row)))]
             for row in malformed_rows
         ]
-        
+
         # Create DataFrame for display
-        df_display = pd.DataFrame(adjusted_rows, columns=extended_header)
+        df_display = pd.DataFrame(adjusted_rows)
+
+        # Fusionner les types et noms des colonnes pour affichage
+        merged_headers = [
+            f"{col}\n({type_})" if type_ else col  # Ajouter type entre parenthèses
+            for col, type_ in zip(extended_header, extended_types)
+        ]
+        df_display.columns = merged_headers  # Appliquer les en-têtes fusionnés
+
         if df_display.empty:
             st.warning("The table is empty and cannot be displayed.")
-            return None, None
+            return None, corrected
+
         # Initialize original values and modified state if not already done
         if 'cell_initial' not in st.session_state:
-# Vérifie si le tableau n'est pas vide avant d'initialiser les valeurs
-            
             if not df_display.empty:
                 st.session_state.cell_initial = {(i, j): df_display.iat[i, j] for i in range(df_display.shape[0]) for j in range(df_display.shape[1])}
                 st.session_state.cell_current = df_display.copy()
-
                 st.session_state.modified_cells = [(0, 0)]  # Initialisation par défaut si le tableau n'est pas vide
             else:
-                return None, None# Liste vide si le tableau est vide
+                return None, None  # Retourne None si le tableau est vide
             
             st.session_state.corrected = []
         if 'validated_rows' not in st.session_state:
@@ -177,6 +195,7 @@ def display_correction_table(malformed_rows, header, saines):
 
         # Display the interactive table
         corrected_df = st.data_editor(st.session_state.cell_current, use_container_width=True)
+
         # Detect changes to record modified cells
         for i in range(corrected_df.shape[0]):
             for j in range(corrected_df.shape[1]):
@@ -184,15 +203,20 @@ def display_correction_table(malformed_rows, header, saines):
                 if current_value != st.session_state.cell_current.iat[i, j]:
                     st.session_state.modified_cells.append((i, j))
                     st.session_state.cell_current.iat[i, j] = current_value  # Update modified value
+
         # Row and column selection inputs in the sidebar
         if not corrected_df.empty:
             row_selection = st.sidebar.text_input("Enter multiple/single row numbers.")
             col_selection = st.sidebar.multiselect(
-                "Select columns", 
-                options=list(range(df_display.shape[1])), 
-                format_func=lambda x: extended_header[x]
+                "Select a single column",
+                options=list(range(df_display.shape[1])),
+                format_func=lambda x: df_display.columns[x]
             )
-
+            st.sidebar.write('<p class="sidebar-text">After cells selection, click on Merge button to merge the selected cells with the next cell on the right.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">After cells selection, click on Delete button to delete the selected cells.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Both Merge and Delete operations result in shifting the rest of the table to the left.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited row to storage.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Only one row can be validated at a time, even when multiple rows has been validated.</p>', unsafe_allow_html=True)
             # Convert input text to index lists
             selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
 
@@ -205,7 +229,6 @@ def display_correction_table(malformed_rows, header, saines):
             selected_rows = []
             col_selection = []
             return st.session_state.cell_current, st.session_state.corrected
- 
 
         # Merge selected cells with the next cell
         if st.sidebar.button("Merge"):
@@ -224,12 +247,12 @@ def display_correction_table(malformed_rows, header, saines):
                     st.session_state.cell_current.iloc[i, j:] = corrected_df.iloc[i, j+1:].tolist() + [""]
             st.sidebar.write("Selected cells were deleted.")
             st.rerun()  # Restart to force update
+
         # Validation des lignes modifiées
         if st.sidebar.button("Validation"):
             if st.session_state.modified_cells or len(st.session_state.cell_current) == 1:
                 rows_to_validate = sorted(set(i for i, _ in st.session_state.modified_cells))
                 valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
-
 
                 for row_index in rows_to_validate:
                     total_fields_count = len(corrected_df.iloc[row_index, :len(header)])
@@ -238,15 +261,13 @@ def display_correction_table(malformed_rows, header, saines):
                         for field in corrected_df.iloc[row_index, len(header):]
                     )
 
-                    # Debug affichage des conditions
-
                     if total_fields_count == len(header) and extra_fields_empty:
                         valid_row = corrected_df.iloc[row_index, :len(header)].tolist()
                         st.session_state.corrected.append(valid_row)
                         valid_rows.append(row_index)
                         st.sidebar.success(f"Row {row_index+1} validated successfully!")
                     else:
-                        st.sidebar.write(f"Row {row_index+1} contains filled extra columns and cannot be validated.")
+                        st.sidebar.write(f"Row {row_index} contains filled extra columns and cannot be validated.")
                 
                 # Supprimer toutes les lignes validées en une seule fois
                 if valid_rows:
@@ -254,11 +275,12 @@ def display_correction_table(malformed_rows, header, saines):
                     st.session_state.cell_current.drop(valid_rows, inplace=True)
                     st.session_state.cell_current.reset_index(drop=True, inplace=True)
                     st.rerun()  # Restart to force update
-                
-        return st.session_state.cell_current, st.session_state.corrected
+
+        return st.session_state.cell_current,None
     else:
         st.success("No malformed rows detected!")
         return None, None
+
 
 
 
@@ -300,78 +322,166 @@ if uploaded_file :
 
     # Découper le contenu en lignes
     lines = modified_content.splitlines()
-
+    total_lines = len(lines)    
     # Initialiser les listes pour les lignes "saines" et "malades"
     saines = []
     malades = []
     store_list = []  # Stocke les lignes incomplètes pour compléter les lignes suivantes
-    logs = []
+    logs_pi = []
+    logs_sigma = []
     # Lire la première ligne pour obtenir le nombre attendu de colonnes
     first_line = lines[0].split(delimiter)
     number = len(first_line)  # Nombre attendu de colonnes
     most_common_count = number  # Utilisez la première ligne comme référence pour la structure
 
 
-    # Initialiser un index explicite
-    index = 1  # Commencez après l'en-tête
-
-    # Parcourir les lignes restantes
+    # Initialiser les variables
+    index = 1  # Commence après l'en-tête
+    new_index = 1
+    store_list = []
+    old_index_buffer = [] 
+    saines_pi = [] # Liste tampon pour capturer tous les indices d'origine
+    nb_malades = 0  
+    nb_saines = 0
+    nb_saines_pi = 0
     while index < len(lines):
         raw_line = lines[index]
         line = raw_line.split(delimiter)  # Diviser chaque ligne selon le délimiteur
 
-        if len(line) > number:
-            # Ajouter aux lignes indisponibles si trop de champs
-            malades.append(line)
-            index += 1  # Passer à la ligne suivante
+        # Ajouter l'index actuel au buffer pour cette itération
+        old_index_buffer.append(index)
 
+        if len(line) > number:
+            # Trop de champs dans la ligne -> Ajouter à "malades"
+            malades.append(line)
+            nb_malades += 1
+            logs_sigma.append((old_index_buffer.copy()[0], 0))
+
+            old_index_buffer.clear()
+            index += 1
+            new_index += 1
         elif len(line) == number:
-            # Ajouter aux lignes saines si le nombre de champs correspond
+            # Ligne correcte -> Ajouter à "saines"
             saines.append(line)
+            nb_saines += 1
+            # Enregistrer le mapping old_index -> new_index
+            old_index_buffer.clear()
+
             index += 1  # Passer à la ligne suivante
+            new_index += 1  # Incrémenter le nouvel index
 
         elif len(line) < number:
-            # Si une ligne est plus courte, essayer de la compléter
+            # Ligne trop courte -> Fusionner avec la suivante
             if store_list:
                 next_line = line
                 line = store_list
             else:
-                # Continuer avec la ligne suivante si `store_list` est vide
+                # Charger la ligne suivante pour tenter une fusion
                 next_index = index + 1
                 if next_index < len(lines):
                     next_line = lines[next_index].split(delimiter)
-                    index += 1  # On a utilisé la ligne suivante, donc incrémenter
+                    old_index_buffer.append(next_index)  # Ajouter la ligne suivante au buffer
+                    index += 1  # Ligne suivante utilisée, donc incrémenter
                 else:
                     next_line = []
 
-            # Fusionner la dernière colonne de la ligne actuelle avec la première colonne de la suivante
+            # Fusionner les colonnes
             if next_line:
                 milieu = line[-1] + next_line[0]
                 result_line = line[:-1] + [milieu] + next_line[1:]
             else:
                 result_line = line
 
-            # Vérifier le résultat après fusion
+            # Vérifier la ligne après fusion
             if len(result_line) == number:
-                logs.append(result_line)
-                saines.append(result_line)
-                store_list = []
+                # Ligne correcte après fusion -> Ajouter à "saines"
+                saines_pi.append(result_line)
+                nb_saines_pi += 1
+                # Enregistrer le mapping old_index_buffer -> new_index
+                logs_pi.append((old_index_buffer.copy()[0], 0))
+                old_index_buffer.clear()
+
+                store_list = []  # Réinitialiser le stockage temporaire
+                new_index += 1  # Incrémenter le nouvel index
             elif len(result_line) < number:
+                # Si encore trop courte -> Stocker pour une future fusion
                 store_list = result_line
             elif len(result_line) > number:
+                # Si trop longue -> Ajouter à "malades"
                 malades.append(result_line)
+                nb_malades += 1
+                logs_sigma.append((old_index_buffer.copy(), 0))
 
-            # Toujours avancer l'index après le traitement
+                # Enregistrer les indices et effacer le buffer
+                old_index_buffer.clear()
+
+            # Avancer l'index après traitement
             index += 1
-    corrected_df,corrected=display_correction_table(malades, first_line,saines)
+        else:
+            # En cas d'anomalie inattendue
+            st.warning(f"Unexpected case at line {index}. Skipping.")
+            old_index_buffer.clear()
+            index += 1
+
+    types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
+
+    corrected_df,corrected=display_correction_table(malades, first_line,types)
     if corrected :
         # Convertir les lignes "saines" en DataFrame
-        df_Pi = pd.DataFrame(corrected, columns=first_line)
+        df_Pi = pd.DataFrame(saines_pi, columns=first_line)
+        df_sigma = pd.DataFrame(corrected, columns=first_line)
         df_saines = pd.DataFrame(saines, columns=first_line)
-        df_final = pd.concat([df_saines,df_Pi],axis=0)
+        df_final = pd.concat([df_saines,df_Pi,df_sigma],axis=0)
             # Récupérer le nom de fichier original sans extension
         base_file_name = remove_file_extension(uploaded_file.name)
+                # Calculer les indices de départ
+        start_index_pi = nb_saines + 1  # Commence après les lignes "saines"
+        start_index_sigma = nb_saines + nb_saines_pi + 1  # Commence après "saines" et "saines_pi"
 
+        # Mettre à jour logs_pi (calcul automatique des nouveaux indices)
+        for i in range(len(logs_pi)):
+            ancien_index, nouveau_index = logs_pi[i]
+            if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                logs_pi[i] = (ancien_index, start_index_pi)
+                start_index_pi += 1  # Incrémenter le nouvel index
+
+        # Mettre à jour logs_sigma (calcul automatique des nouveaux indices)
+        for i in range(len(logs_sigma)):
+            ancien_index, nouveau_index = logs_sigma[i]
+            if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                logs_sigma[i] = (ancien_index, start_index_sigma)
+                start_index_sigma += 1  # Incrémenter le nouvel index
+
+        def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
+            content = "Summary of the file conversion:\n"
+            content += f"Total lines in the original file: {total_lines}\n"
+            content += f"Number of 'healthy' lines: {nb_saines}\n"
+            content += f"Number of 'healthy' lines after merging: {nb_saines_pi}\n"
+            content += f"Number of 'unhealthy' lines: {nb_malades}\n\n"
+            content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
+            content += "Logs after treatement:\n"
+            content += "Logs for Pi:\n"
+            for ancien_index, nouveau_index in logs_pi:
+                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+            content += "\n"  # Ligne vide pour séparer les sections
+
+            content += "Logs for Sigma:\n"
+            for ancien_index, nouveau_index in logs_sigma:
+                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+            return content
+
+        # Générer le contenu du fichier texte
+        file_content = generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades)
+
+        # Afficher un bouton de téléchargement
+        st.download_button(
+            label="Download logs",
+            data=file_content,
+            file_name=f"{base_file_name}_logs.txt",
+            mime="text/plain"
+        )        
             # Générer un fichier CSV téléchargeable avec le nom original
         csv_data = df_final.to_csv(index=False).encode(encodage)
         st.download_button(
