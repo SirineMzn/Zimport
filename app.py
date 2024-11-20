@@ -9,17 +9,25 @@ import chardet
 from collections import Counter
 from io import StringIO
 import io
-
+import random
 
 # Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["openai_api_key"]
 
 # Initialisation de l'état de session Streamlit
-if "id" not in st.session_state:
-    st.session_state.id = uuid.uuid4()
-    st.session_state.docs_loaded = False
 
-session_id = st.session_state.id
+
+
+# Initialisation de l'état de session Streamlit
+if "file_uploaded" not in st.session_state:
+    st.session_state.file_uploaded = False
+    st.session_state.file_name = None
+    st.session_state.file_content = None
+    st.session_state.file_extension = None
+    st.session_state.docs_loaded = False
+    st.session_state.data_processed = False
+
+session_id = st.session_state.id if "id" in st.session_state else uuid.uuid4()
 # Augmente la limite de taille de champ
 max_int = sys.maxsize
 while True:
@@ -158,8 +166,10 @@ def display_correction_table(malformed_rows, header,types):
         
         max_columns = max(len(row) for row in malformed_rows)
         extended_header = header + [f"Unnamed_Column_{i+1}" for i in range(len(header), max_columns)]
-        extended_types = types + [""] * (max_columns - len(header))  # Types pour les colonnes supplémentaires
-
+        if len(types) == len(header):
+            extended_types = types + [""] * (max_columns - len(header))  # Types pour les colonnes supplémentaires
+        else:
+            extended_types = [""] * max_columns
         # Adjust rows to match the maximum number of columns and replace None with ""
         adjusted_rows = [
             [field if field is not None else "" for field in (row + [None] * (max_columns - len(row)))]
@@ -193,7 +203,8 @@ def display_correction_table(malformed_rows, header,types):
             st.session_state.corrected = []
         if 'validated_rows' not in st.session_state:
             st.session_state.validated_rows = []
-
+        if 'selection_rows' not in st.session_state:
+            st.session_state.selection_rows = list(range(1,df_display.shape[0]+1))
         # Display the interactive table
         corrected_df = st.data_editor(st.session_state.cell_current, use_container_width=True)
 
@@ -207,8 +218,11 @@ def display_correction_table(malformed_rows, header,types):
 
         # Row and column selection inputs in the sidebar
         if not corrected_df.empty:
-            row_selection = st.sidebar.text_input("Enter multiple/single row numbers.")
-            col_selection = st.sidebar.multiselect(
+            selected_rows = st.sidebar.multiselect(
+                "Select multiple/single row numbers.",
+                options=st.session_state.selection_rows)
+                
+            col_selection = st.sidebar.selectbox(
                 "Select a single column",
                 options=list(range(df_display.shape[1])),
                 format_func=lambda x: df_display.columns[x]
@@ -218,7 +232,6 @@ def display_correction_table(malformed_rows, header,types):
             st.sidebar.write('<p class="sidebar-text">Both Merge and Delete operations result in shifting the rest of the table to the left.</p>', unsafe_allow_html=True)
             st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited rows to storage.</p>', unsafe_allow_html=True)
             # Convert input text to index lists
-            selected_rows = [int(x.strip()) for x in row_selection.split(",") if x.strip().isdigit()]
         else:
             st.sidebar.write("The table is empty. No operations can be performed.")
             selected_rows = []
@@ -235,22 +248,22 @@ def display_correction_table(malformed_rows, header,types):
                 # Convertir l'index sélectionné en position réelle
                 pos = current_indices.index(row_index)
 
-                for col_index in col_selection:
-                    if col_index < st.session_state.cell_current.shape[1] - 1:  # Vérifier que la fusion est possible
-                        try:
+                
+                if col_selection < st.session_state.cell_current.shape[1] - 1:  # Vérifier que la fusion est possible
+                    try:
                             # Effectuer la fusion
-                            st.session_state.cell_current.iat[pos, col_index] = (
-                                str(st.session_state.cell_current.iat[pos, col_index]) +
+                        st.session_state.cell_current.iat[pos, col_selection] = (
+                            str(st.session_state.cell_current.iat[pos, col_selection]) +
                                 " " +
-                                str(st.session_state.cell_current.iat[pos, col_index + 1])
+                                str(st.session_state.cell_current.iat[pos, col_selection + 1])
                             )
                             # Décaler les cellules vers la gauche
-                            st.session_state.cell_current.iloc[pos, col_index + 1:] = (
-                                st.session_state.cell_current.iloc[pos, col_index + 2:].tolist() + [""]
+                        st.session_state.cell_current.iloc[pos, col_selection + 1:] = (
+                                st.session_state.cell_current.iloc[pos, col_selection + 2:].tolist() + [""]
                             )
-                        except IndexError:
-                            st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_index}.")
-                            continue
+                    except IndexError:
+                        st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_selection}.")
+                        continue
             st.sidebar.success("Merge completed.")
             st.rerun()  # Redémarrer pour appliquer les modifications
 
@@ -267,15 +280,14 @@ def display_correction_table(malformed_rows, header,types):
                 # Convertir l'index sélectionné en position réelle
                 pos = current_indices.index(row_index)
 
-                for col_index in col_selection:
-                    try:
+                try:
                         # Supprimer la cellule et décaler les cellules suivantes vers la gauche
-                        st.session_state.cell_current.iloc[pos, col_index:] = (
-                            st.session_state.cell_current.iloc[pos, col_index + 1:].tolist() + [""]
+                    st.session_state.cell_current.iloc[pos, col_selection:] = (
+                        st.session_state.cell_current.iloc[pos, col_selection + 1:].tolist() + [""]
                         )
-                    except IndexError:
-                        st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_index}.")
-                        continue
+                except IndexError:
+                    st.sidebar.warning(f"Invalid operation on row {row_index}, column {col_selection}.")
+                    continue
             st.sidebar.success("Delete completed.")
             st.rerun()  # Redémarrer pour appliquer les modifications
 
@@ -290,7 +302,7 @@ def display_correction_table(malformed_rows, header,types):
 
                 for row_index in selected_rows:
                     if row_index not in current_indices:
-                        st.sidebar.warning(f"Ligne {row_index} invalide ou déjà supprimée.")
+                        st.sidebar.warning(f"Row {row_index} is invalid or has been deleted.")
                         continue
 
                     # Convertir l'index sélectionné en position réelle
@@ -320,7 +332,7 @@ def display_correction_table(malformed_rows, header,types):
                     # Réinitialiser l'index pour commencer à 1
                     st.session_state.cell_current.reset_index(drop=True, inplace=True)
                     st.session_state.cell_current.index = st.session_state.cell_current.index + 1
-
+                    st.session_state.selection_rows =list(range(1,st.session_state.cell_current.shape[0]+1)) # Mettre à jour les lignes sélectionnées
                     st.rerun()  # Redémarrer pour forcer la mise à jour
         return st.session_state.cell_current,None
     else:
@@ -329,15 +341,26 @@ def display_correction_table(malformed_rows, header,types):
 
 
 
+# Étape 1 : Affichage de l'uploader si aucun fichier n'est chargé
+if not st.session_state.file_uploaded:
+    uploaded_file = st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
+    
+    if uploaded_file:
+        st.session_state.file_uploaded = True
+        st.session_state.file_name = uploaded_file.name
+        st.session_state.file_content = uploaded_file.read()
+        st.session_state.file_extension = verifier_extension_fichier(uploaded_file.name)
+        st.session_state.docs_loaded = True
+        st.rerun()
 
-# Uploader de fichier Excel
-uploaded_file= st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
-if uploaded_file :
-    extension = verifier_extension_fichier(uploaded_file.name)
-    base_file_name = remove_file_extension(uploaded_file.name)
+# Étape 2 : Affichage et traitement après téléchargement du fichier
+if st.session_state.file_uploaded:
+    st.write(f"### File Loaded: {st.session_state.file_name}")
+    content = st.session_state.file_content
+    extension = st.session_state.file_extension
+    base_file_name = remove_file_extension(st.session_state.file_name)
 
-    content = uploaded_file.read()
-    del uploaded_file  # Supprimer le fichier pour libérer de l'espace
+    
     # Détecter l'encodage
     try:
         decoded_content, encodage = open_file_with_auto_and_manual_encodings(content)
@@ -365,7 +388,12 @@ if uploaded_file :
         # Sinon, utiliser le contenu tel quel
         texte = modified_content
 
+    # Boutons pour télécharger ou réinitialiser
+    if st.button("Reset File Upload"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
 
+        st.rerun()
 
     # Découper le contenu en lignes
     lines = modified_content.splitlines()
@@ -464,7 +492,38 @@ if uploaded_file :
             st.warning(f"Unexpected case at line {index}. Skipping.")
             old_index_buffer.clear()
             index += 1
-
+    
+    def déterminer_types(first_line, lignes_aleatoires):
+        types = []
+        prompt = (
+            f"Tu es un assistant qui détermine les types de données des champs d'un fichier CSV. "
+            f"Voici l'entête des données : {first_line}. "
+            f"Voici quelques exemples de données correctes : {lignes_aleatoires}. "
+            f"si tu trouves des champs date, tu peux les identifier comme tels. "
+            f"Réponds seulement avec une liste de types de données pour chaque champ dans l'ordre d'apparition des champs."
+        )
+        
+        # Utiliser la nouvelle interface API
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",  
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        # Extraction et nettoyage de la réponse
+        raw_output = response['choices'][0]['message']['content'].strip()
+        
+        # Nettoyer les balises Markdown et autres caractères indésirables
+        cleaned_output = raw_output.replace("```plaintext\n", "").replace("\n```", "").replace("[", "").replace("]", "").strip()
+        
+        # Transformation en liste
+        types = [t.strip("'\" ") for t in cleaned_output.split(", ")]
+        
+        return types
+    if len(saines)>10:
+        lignes_aleatoires = random.sample(saines, 10)
+    else: 
+        lignes_aleatoires = random.sample(saines, len(saines))   
+    #types = déterminer_types(first_line,lignes_aleatoires)
     types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
 
     corrected_df,corrected=display_correction_table(malades, first_line,types)
