@@ -34,22 +34,22 @@ hashed_password_user16 = st.secrets["auth"]["HASHED_PASSWORD_Francois"]
 
 # Simuler une base d'utilisateurs
 USERS = {
-    "Timothée Verluise": hashed_password_user1,
-    "Hugo Andries": hashed_password_user2,
-    "Thomas Tremblay": hashed_password_user3,
-    "Paul Laloue": hashed_password_user4,
-    "Auriane Giovannoni": hashed_password_user5,
-    "Jordan Widom": hashed_password_user6,
-    "Benjamin Loyez": hashed_password_user7,
-    "Robin David": hashed_password_user8,
-    "Baptiste Leroux": hashed_password_user9,
-    "Bouchra Demanne": hashed_password_user10,
-    "Sophia Mana": hashed_password_user11,
-    "Thomas Tran": hashed_password_user12,
-    "Solène Claudel": hashed_password_user13,
+    "TVE": hashed_password_user1,
+    "HAN": hashed_password_user2,
+    "TTR": hashed_password_user3,
+    "PLA": hashed_password_user4,
+    "AGI": hashed_password_user5,
+    "JWI": hashed_password_user6,
+    "BLO": hashed_password_user7,
+    "RDA": hashed_password_user8,
+    "BLE": hashed_password_user9,
+    "BDE": hashed_password_user10,
+    "SMA": hashed_password_user11,
+    "TTV": hashed_password_user12,
+    "SCL": hashed_password_user13,
     "Sisi": hashed_password_user14,
-    "Zaira Cosman": hashed_password_user15,
-    "François Fanuel": hashed_password_user16
+    "ZCO": hashed_password_user15,
+    "FFA": hashed_password_user16
 }
 # Fonction pour vérifier le mot de passe
 def verifier_mot_de_passe(mot_de_passe_saisi, hashed_password):
