@@ -13,7 +13,6 @@ import random
 import bcrypt
 # Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["API_key"]["openai_api_key"]
-maxUploadSize = 2048
 
 hashed_password_user1 = st.secrets["auth"]["HASHED_PASSWORD_Tim"]
 hashed_password_user2 = st.secrets["auth"]["HASHED_PASSWORD_Hugo"]
