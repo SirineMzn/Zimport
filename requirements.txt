@@ -1,6 +1,5 @@
 pandas 
 openai
-csv
 chardet
 collections
 uuid
