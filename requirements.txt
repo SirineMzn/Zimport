@@ -1,7 +1,6 @@
 pandas 
 openai
 chardet
-collections
 uuid
 pip==24.2
 streamlit==1.39.0
