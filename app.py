@@ -81,7 +81,7 @@ if not st.session_state.authenticated:
             else:
                 st.error("Incorrect password.")
         else:
-            st.error("ncorrect username.")
+            st.error("Incorrect username.")
 
 # Si authentifié, afficher l'interface de l'application
 if st.session_state.authenticated:
@@ -229,7 +229,7 @@ if st.session_state.authenticated:
 
         # Afficher le texte avec une classe CSS personnalisée
         if malformed_rows:
-            st.write("## Detected malformed rows")
+            st.write("## Invalid rows detected")
             
             max_columns = max(len(row) for row in malformed_rows)
             extended_header = header + [f"Unnamed_Column_{i+1}" for i in range(len(header), max_columns)]
@@ -255,7 +255,7 @@ if st.session_state.authenticated:
             # Décaler l'index pour commencer à 1
             df_display.index = df_display.index + 1
             if df_display.empty:
-                st.warning("The table is empty and cannot be displayed.")
+                st.warning("No data available to display.")
                 return None, corrected
 
             # Initialize original values and modified state if not already done
@@ -290,14 +290,15 @@ if st.session_state.authenticated:
                     options=st.session_state.selection_rows)
                     
                 col_selection = st.sidebar.selectbox(
-                    "Select a single column",
+                    "Select a column",
                     options=list(range(df_display.shape[1])),
                     format_func=lambda x: df_display.columns[x]
                 )
-                st.sidebar.write('<p class="sidebar-text">After cells selection, click on Merge button to merge the selected cells with the next cell on the right.</p>', unsafe_allow_html=True)
-                st.sidebar.write('<p class="sidebar-text">After cells selection, click on Delete button to delete the selected cells.</p>', unsafe_allow_html=True)
-                st.sidebar.write('<p class="sidebar-text">Both Merge and Delete operations result in shifting the rest of the table to the left.</p>', unsafe_allow_html=True)
-                # Convert input text to index lists
+                st.sidebar.write('<p class="sidebar-text">After selecting the cells, click the Merge button to combine them with the adjacent cell on the right.</p>', unsafe_allow_html=True)
+                st.sidebar.write('<p class="sidebar-text">After selecting the cells, click the Delete button to remove the selected cells.</p>', unsafe_allow_html=True)
+                st.sidebar.write('<p class="sidebar-text">Both Merge and Delete actions will shift the remaining table content to the left.</p>', unsafe_allow_html=True)
+            
+               # Convert input text to index lists
             else:
                 st.sidebar.write("The table is empty. No operations can be performed.")
                 selected_rows = []
@@ -356,10 +357,10 @@ if st.session_state.authenticated:
                         continue
                 st.sidebar.success("Delete completed.")
                 st.rerun()  # Redémarrer pour appliquer les modifications
-            st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited rows to storage.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Click the Validate button to save the edited rows to storage.</p>', unsafe_allow_html=True)
 
             # Validation des lignes modifiées
-            if st.sidebar.button("Validation"):
+            if st.sidebar.button("Validate"):
                 if st.session_state.modified_cells or len(st.session_state.cell_current) == 1:
                     
                     valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
@@ -410,7 +411,7 @@ if st.session_state.authenticated:
 
     # Étape 1 : Affichage de l'uploader si aucun fichier n'est chargé
     if not st.session_state.file_uploaded:
-        uploaded_file = st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
+        uploaded_file = st.file_uploader("Please upload a CSV or text file only.", type=["csv", "txt"])
     
         st.info("Welcome to Zimport! Please upload a csv or Text file only, your file will be analyzed immediately.")
 
@@ -459,7 +460,7 @@ if st.session_state.authenticated:
             texte = modified_content
 
         # Boutons pour télécharger ou réinitialiser
-        if st.button("Reset File Upload"):
+        if st.button("Clear File and Restart."):
             for key in list(st.session_state.keys()):
                 if key != "authenticated":
                     del st.session_state[key]
@@ -597,10 +598,10 @@ if st.session_state.authenticated:
             lignes_aleatoires = random.sample(saines, len(saines))   
         #types = déterminer_types(first_line,lignes_aleatoires)
         types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
-        st.info(f"Number of columns detected: {number},\n"
-                f"Number of good lines: {nb_saines},\n"
-                f"Number of line breaks: {line_breaks},\n"
-                f"Number of bad lines: {nb_malades}")
+        st.info(f"File Analysis Summary: Columns Detected: {number},\n"
+                f"Valid Rows: {nb_saines} (lines without errors),\n"
+                f"Line Breaks Fixed: {line_breaks} (extra line breaks detected and removed),\n"
+                f"Invalid Rows: {nb_malades} (manual review required for rows with too many columns).")
         
         corrected_df,corrected=display_correction_table(malades, first_line,types)
         if corrected :
@@ -631,18 +632,18 @@ if st.session_state.authenticated:
             def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
                 content = "Summary of the file conversion:\n"
                 content += f"Total lines in the original file: {total_lines}\n"
-                content += f"Number of 'healthy' lines: {nb_saines}\n"
-                content += f"Number of 'healthy' lines after merging: {nb_saines_pi}\n"
-                content += f"Number of 'unhealthy' lines: {nb_malades}\n\n"
+                content += f"Number of 'valid' lines: {nb_saines}\n"
+                content += f"Number of 'valid' lines after merging: {nb_saines_pi}\n"
+                content += f"Number of 'invalid' lines: {nb_malades}\n\n"
                 content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
                 content += "Logs after treatement:\n"
-                content += "Logs for Pi:\n"
+                content += "Logs for Line Breaks Fixed:\n"
                 for ancien_index, nouveau_index in logs_pi:
                     content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
 
                 content += "\n"  # Ligne vide pour séparer les sections
 
-                content += "Logs for Sigma:\n"
+                content += "Logs for manual review:\n"
                 for ancien_index, nouveau_index in logs_sigma:
                     content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
 
