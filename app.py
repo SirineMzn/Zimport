@@ -413,8 +413,7 @@ if st.session_state.authenticated:
     if not st.session_state.file_uploaded:
         uploaded_file = st.file_uploader("Please upload a CSV or text file only.", type=["csv", "txt"])
     
-        st.info("Welcome to Zimport! Please upload a csv or Text file only, your file will be analyzed immediately.")
-
+        st.info("Welcome to Zimport! Please upload a csv or Text file.The analysis will start automatically.")
         if uploaded_file:
             st.session_state.file_uploaded = True
             st.session_state.file_name = uploaded_file.name
@@ -664,7 +663,7 @@ if st.session_state.authenticated:
             st.download_button(
                     label="Download your file as CSV",
                     data=csv_data,
-                    file_name=f"{base_file_name}_saines.csv",
+                    file_name=f"{base_file_name}_zimport.csv",
                     mime="text/csv"
                 )
 
@@ -673,6 +672,6 @@ if st.session_state.authenticated:
             st.download_button(
                     label="Download your file as TXT",
                     data=txt_data,
-                    file_name=f"{base_file_name}_saines.txt",
+                    file_name=f"{base_file_name}_zimport.txt",
                     mime="text/plain"
                 )
