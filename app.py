@@ -11,6 +11,7 @@ from io import StringIO
 import io
 import random
 import bcrypt
+import time
 # Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["API_key"]["openai_api_key"]
 
@@ -75,7 +76,8 @@ if not st.session_state.authenticated:
                 st.session_state.authenticated = True
                 st.session_state.username = username
                 st.success(f"Welcome {username} !")
-                
+                time.sleep(2)
+                st.rerun()
             else:
                 st.error("Incorrect password.")
         else:
@@ -593,8 +595,8 @@ if st.session_state.authenticated:
             lignes_aleatoires = random.sample(saines, 10)
         else: 
             lignes_aleatoires = random.sample(saines, len(saines))   
-        types = déterminer_types(first_line,lignes_aleatoires)
-        #types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
+        #types = déterminer_types(first_line,lignes_aleatoires)
+        types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
         st.info(f"Number of columns detected: {number},\n"
                 f"Number of good lines: {nb_saines},\n"
                 f"Number of line breaks: {line_breaks},\n"
