@@ -321,7 +321,7 @@ if st.session_state.authenticated:
                                 # Effectuer la fusion
                             st.session_state.cell_current.iat[pos, col_selection] = (
                                 str(st.session_state.cell_current.iat[pos, col_selection]) +
-                                    " " +
+                                    
                                     str(st.session_state.cell_current.iat[pos, col_selection + 1])
                                 )
                                 # Décaler les cellules vers la gauche
