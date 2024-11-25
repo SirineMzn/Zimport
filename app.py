@@ -603,9 +603,10 @@ if st.session_state.authenticated:
                 f"Invalid Rows: {nb_malades} (manual review required for rows with too many columns).")
         
         corrected_df,corrected=display_correction_table(malades, first_line,types)
-        if corrected :
+        if corrected or saines_pi :
             # Convertir les lignes "saines" en DataFrame
             df_Pi = pd.DataFrame(saines_pi, columns=first_line)
+            
             df_sigma = pd.DataFrame(corrected, columns=first_line)
             df_saines = pd.DataFrame(saines, columns=first_line)
             df_final = pd.concat([df_saines,df_Pi,df_sigma],axis=0)
