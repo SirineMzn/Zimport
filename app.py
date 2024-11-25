@@ -11,9 +11,6 @@ from io import StringIO
 import io
 import random
 import bcrypt
-import time
-import tempfile
-import gc
 # Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["API_key"]["openai_api_key"]
 
@@ -32,27 +29,27 @@ hashed_password_user12 = st.secrets["auth"]["HASHED_PASSWORD_Thomas_TRA"]
 hashed_password_user13 = st.secrets["auth"]["HASHED_PASSWORD_Solene"]
 hashed_password_user14 = st.secrets["auth"]["HASHED_PASSWORD_Sisi"]
 hashed_password_user15 = st.secrets["auth"]["HASHED_PASSWORD_Zaira"]
-hashed_password_user16 = st.secrets["auth"]["HASHED_PASSWORD_Francois"]
+hashed_password_user16 = st.secrets["auth"]["HASHED_PASSWORD_François"]
 
 
 # Simuler une base d'utilisateurs
 USERS = {
-    "TVE": hashed_password_user1,
-    "HAN": hashed_password_user2,
-    "TTR": hashed_password_user3,
-    "PLA": hashed_password_user4,
-    "AGI": hashed_password_user5,
-    "JWI": hashed_password_user6,
-    "BLO": hashed_password_user7,
-    "RDA": hashed_password_user8,
-    "BLE": hashed_password_user9,
-    "BDE": hashed_password_user10,
-    "SMA": hashed_password_user11,
-    "TTV": hashed_password_user12,
-    "SCL": hashed_password_user13,
+    "Timothée Verluise": hashed_password_user1,
+    "Hugo Andries": hashed_password_user2,
+    "Thomas Tremblay": hashed_password_user3,
+    "Paul Laloue": hashed_password_user4,
+    "Auriane Giovannoni": hashed_password_user5,
+    "Jordan Widom": hashed_password_user6,
+    "Benjamin Loyez": hashed_password_user7,
+    "Robin David": hashed_password_user8,
+    "Baptiste Leroux": hashed_password_user9,
+    "Bouchra Demanne": hashed_password_user10,
+    "Sophia Mana": hashed_password_user11,
+    "Thomas Tran": hashed_password_user12,
+    "Solène Claudel": hashed_password_user13,
     "Sisi": hashed_password_user14,
-    "ZCO": hashed_password_user15,
-    "FFA": hashed_password_user16
+    "Zaira Cosman": hashed_password_user15,
+    "François Fanuel": hashed_password_user16
 }
 # Fonction pour vérifier le mot de passe
 def verifier_mot_de_passe(mot_de_passe_saisi, hashed_password):
@@ -78,12 +75,11 @@ if not st.session_state.authenticated:
                 st.session_state.authenticated = True
                 st.session_state.username = username
                 st.success(f"Welcome {username} !")
-                time.sleep(2)
-                st.rerun()
+                
             else:
                 st.error("Incorrect password.")
         else:
-            st.error("Incorrect username.")
+            st.error("ncorrect username.")
 
 # Si authentifié, afficher l'interface de l'application
 if st.session_state.authenticated:
@@ -231,7 +227,7 @@ if st.session_state.authenticated:
 
         # Afficher le texte avec une classe CSS personnalisée
         if malformed_rows:
-            st.write("## Invalid rows detected")
+            st.write("## Detected malformed rows")
             
             max_columns = max(len(row) for row in malformed_rows)
             extended_header = header + [f"Unnamed_Column_{i+1}" for i in range(len(header), max_columns)]
@@ -257,7 +253,7 @@ if st.session_state.authenticated:
             # Décaler l'index pour commencer à 1
             df_display.index = df_display.index + 1
             if df_display.empty:
-                st.warning("No data available to display.")
+                st.warning("The table is empty and cannot be displayed.")
                 return None, corrected
 
             # Initialize original values and modified state if not already done
@@ -292,15 +288,14 @@ if st.session_state.authenticated:
                     options=st.session_state.selection_rows)
                     
                 col_selection = st.sidebar.selectbox(
-                    "Select a column",
+                    "Select a single column",
                     options=list(range(df_display.shape[1])),
                     format_func=lambda x: df_display.columns[x]
                 )
-                st.sidebar.write('<p class="sidebar-text">After selecting the cells, click the Merge button to combine them with the adjacent cell on the right.</p>', unsafe_allow_html=True)
-                st.sidebar.write('<p class="sidebar-text">After selecting the cells, click the Delete button to remove the selected cells.</p>', unsafe_allow_html=True)
-                st.sidebar.write('<p class="sidebar-text">Both Merge and Delete actions will shift the remaining table content to the left.</p>', unsafe_allow_html=True)
-            
-               # Convert input text to index lists
+                st.sidebar.write('<p class="sidebar-text">After cells selection, click on Merge button to merge the selected cells with the next cell on the right.</p>', unsafe_allow_html=True)
+                st.sidebar.write('<p class="sidebar-text">After cells selection, click on Delete button to delete the selected cells.</p>', unsafe_allow_html=True)
+                st.sidebar.write('<p class="sidebar-text">Both Merge and Delete operations result in shifting the rest of the table to the left.</p>', unsafe_allow_html=True)
+                # Convert input text to index lists
             else:
                 st.sidebar.write("The table is empty. No operations can be performed.")
                 selected_rows = []
@@ -323,7 +318,7 @@ if st.session_state.authenticated:
                                 # Effectuer la fusion
                             st.session_state.cell_current.iat[pos, col_selection] = (
                                 str(st.session_state.cell_current.iat[pos, col_selection]) +
-                                    
+                                    " " +
                                     str(st.session_state.cell_current.iat[pos, col_selection + 1])
                                 )
                                 # Décaler les cellules vers la gauche
@@ -359,10 +354,10 @@ if st.session_state.authenticated:
                         continue
                 st.sidebar.success("Delete completed.")
                 st.rerun()  # Redémarrer pour appliquer les modifications
-            st.sidebar.write('<p class="sidebar-text">Click the Validate button to save the edited rows to storage.</p>', unsafe_allow_html=True)
+            st.sidebar.write('<p class="sidebar-text">Press the validation button to send edited rows to storage.</p>', unsafe_allow_html=True)
 
             # Validation des lignes modifiées
-            if st.sidebar.button("Validate"):
+            if st.sidebar.button("Validation"):
                 if st.session_state.modified_cells or len(st.session_state.cell_current) == 1:
                     
                     valid_rows = []  # Liste pour stocker les lignes à supprimer après validation
@@ -409,50 +404,30 @@ if st.session_state.authenticated:
             st.success("No malformed rows detected!")
             return None, None
 
-    def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
-            content = "Summary of the file conversion:\n"
-            content += f"Total lines in the original file: {total_lines}\n"
-            content += f"Number of 'valid' lines: {nb_saines}\n"
-            content += f"Number of 'valid' lines after merging: {nb_saines_pi}\n"
-            content += f"Number of 'invalid' lines: {nb_malades}\n\n"
-            content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
-            content += "Logs after treatement:\n"
-            content += "Logs for Line Breaks Fixed:\n"
-            for ancien_index, nouveau_index in logs_pi:
-                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
-
-            content += "\n"  # Ligne vide pour séparer les sections
-
-            content += "Logs for manual review:\n"
-            for ancien_index, nouveau_index in logs_sigma:
-                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
-
-            return content
-
 
 
     # Étape 1 : Affichage de l'uploader si aucun fichier n'est chargé
     if not st.session_state.file_uploaded:
-        uploaded_file = st.file_uploader("Please upload a CSV or text file only.", type=["csv", "txt"])
+        uploaded_file = st.file_uploader("Please upload a csv or Text file only", type=["csv", "txt"])
     
-        st.info("Welcome to Zimport! Please upload a csv or Text file.The analysis will start automatically.")
+        st.info("Welcome to Zimport! Please upload a csv or Text file only, your file will be analyzed immediately.")
+
         if uploaded_file:
             st.session_state.file_uploaded = True
             st.session_state.file_name = uploaded_file.name
             st.session_state.file_content = uploaded_file.read()
             st.session_state.file_extension = verifier_extension_fichier(uploaded_file.name)
             st.session_state.docs_loaded = True
-            del uploaded_file
+            
             st.rerun()
 
     # Étape 2 : Affichage et traitement après téléchargement du fichier
     if st.session_state.file_uploaded:
         st.write(f"### File Loaded: {st.session_state.file_name}")
         content = st.session_state.file_content
-        
         extension = st.session_state.file_extension
         base_file_name = remove_file_extension(st.session_state.file_name)
-        
+
         
         # Détecter l'encodage
         try:
@@ -469,11 +444,20 @@ if st.session_state.authenticated:
         number_lines = newlines[new_line]
             # Appeler la fonction pour détecter le délimiteur et obtenir le contenu modifié si nécessaire
         delimiter, sep_inexistant, modified_content = detect_delimiter(content, encodage)
-        del content
-        del decoded_content
+
+        # Vérifier si une conversion est nécessaire
+
+        # Si le fichier est un CSV, le convertir en TXT
+        if extension == '.csv':
+            # Utiliser `modified_content` pour la conversion
+            texte = convert_csv_to_txt(modified_content, sep_inexistant or delimiter, encodage, new_line)
+            delimiter = sep_inexistant or delimiter
+        else:
+            # Sinon, utiliser le contenu tel quel
+            texte = modified_content
 
         # Boutons pour télécharger ou réinitialiser
-        if st.button("Clear File and Restart."):
+        if st.button("Reset File Upload"):
             for key in list(st.session_state.keys()):
                 if key != "authenticated":
                     del st.session_state[key]
@@ -482,7 +466,6 @@ if st.session_state.authenticated:
 
         # Découper le contenu en lignes
         lines = modified_content.splitlines()
-        del modified_content
         total_lines = len(lines)    
         # Initialiser les listes pour les lignes "saines" et "malades"
         saines = []
@@ -494,6 +477,7 @@ if st.session_state.authenticated:
         first_line = lines[0].split(delimiter)
         number = len(first_line)  # Nombre attendu de colonnes
         
+        most_common_count = number  # Utilisez la première ligne comme référence pour la structure
         # Initialiser les variables
         index = 1  # Commence après l'en-tête
         store_list = []
@@ -578,7 +562,7 @@ if st.session_state.authenticated:
                 st.warning(f"Unexpected case at line {index}. Skipping.")
                 old_index_buffer.clear()
                 index += 1
-        del lines
+        
         def déterminer_types(first_line, lignes_aleatoires):
             types = []
             prompt = (
@@ -611,83 +595,81 @@ if st.session_state.authenticated:
             lignes_aleatoires = random.sample(saines, len(saines))   
         #types = déterminer_types(first_line,lignes_aleatoires)
         types = ["String", "String", "Date", "String", "String", "String", "Date", "String", "String", "String", "Date", "String", "String"]
-        st.info(f"File Analysis Summary: Columns Detected: {number},\n"
-                f"Valid Rows: {nb_saines} (lines without errors),\n"
-                f"Line Breaks Fixed: {line_breaks} (extra line breaks detected and removed),\n"
-                f"Invalid Rows: {nb_malades} (manual review required for rows with too many columns).")
+        st.info(f"Number of columns detected: {number},\n"
+                f"Number of good lines: {nb_saines},\n"
+                f"Number of line breaks: {line_breaks},\n"
+                f"Number of bad lines: {nb_malades}")
         
         corrected_df,corrected=display_correction_table(malades, first_line,types)
-        df_saines = pd.DataFrame(saines, columns=first_line)
-        saines.clear()
-        if saines_pi:
-            df_Pi = pd.DataFrame(saines_pi, columns=first_line)
-            saines_pi.clear()
-
-            df_final = pd.concat([df_saines,df_Pi],axis=0)
-            df_saines = None
-            df_Pi = None
-            # Calculer les indices de départ
-            start_index_pi = nb_saines + 1  # Commence après les lignes "saines"
-
-            # Mettre à jour logs_pi (calcul automatique des nouveaux indices)
-            if logs_pi:
-                for i in range(len(logs_pi)):
-                    ancien_index, nouveau_index = logs_pi[i]
-                    if nouveau_index == 0:  # Si le nouveau index est 0, calculer
-                        logs_pi[i] = (ancien_index, start_index_pi)
-                        start_index_pi += 1  # Incrémenter le nouvel index
-        else : 
-            
-            df_final = df_saines
-            df_saines = None
-            logs_pi = None
         if corrected :
             # Convertir les lignes "saines" en DataFrame
+            df_Pi = pd.DataFrame(saines_pi, columns=first_line)
             df_sigma = pd.DataFrame(corrected, columns=first_line)
-            del corrected
-
-            df_final = pd.concat([df_final,df_sigma],axis=0)
-
-
-            df_final = None
-            df_sigma = None
-
-            
+            df_saines = pd.DataFrame(saines, columns=first_line)
+            df_final = pd.concat([df_saines,df_Pi,df_sigma],axis=0)
+                # Récupérer le nom de fichier original sans extension
+                    # Calculer les indices de départ
+            start_index_pi = nb_saines + 1  # Commence après les lignes "saines"
             start_index_sigma = nb_saines + nb_saines_pi + 1  # Commence après "saines" et "saines_pi"
-            if logs_sigma:
-                # Mettre à jour logs_sigma (calcul automatique des nouveaux indices)
-                for i in range(len(logs_sigma)):
-                    ancien_index, nouveau_index = logs_sigma[i]
-                    if nouveau_index == 0:  # Si le nouveau index est 0, calculer
-                        logs_sigma[i] = (ancien_index, start_index_sigma)
-                        start_index_sigma += 1  # Incrémenter le nouvel index
 
-        csv_data = df_final.to_csv(index=False).encode(encodage)
-        txt_data = df_final.to_csv(index=False, sep=delimiter).encode(encodage)
+            # Mettre à jour logs_pi (calcul automatique des nouveaux indices)
+            for i in range(len(logs_pi)):
+                ancien_index, nouveau_index = logs_pi[i]
+                if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                    logs_pi[i] = (ancien_index, start_index_pi)
+                    start_index_pi += 1  # Incrémenter le nouvel index
+
+            # Mettre à jour logs_sigma (calcul automatique des nouveaux indices)
+            for i in range(len(logs_sigma)):
+                ancien_index, nouveau_index = logs_sigma[i]
+                if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                    logs_sigma[i] = (ancien_index, start_index_sigma)
+                    start_index_sigma += 1  # Incrémenter le nouvel index
+
+            def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
+                content = "Summary of the file conversion:\n"
+                content += f"Total lines in the original file: {total_lines}\n"
+                content += f"Number of 'healthy' lines: {nb_saines}\n"
+                content += f"Number of 'healthy' lines after merging: {nb_saines_pi}\n"
+                content += f"Number of 'unhealthy' lines: {nb_malades}\n\n"
+                content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
+                content += "Logs after treatement:\n"
+                content += "Logs for Pi:\n"
+                for ancien_index, nouveau_index in logs_pi:
+                    content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+                content += "\n"  # Ligne vide pour séparer les sections
+
+                content += "Logs for Sigma:\n"
+                for ancien_index, nouveau_index in logs_sigma:
+                    content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+                return content
 
             # Générer le contenu du fichier texte
-        file_content = generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades)
+            file_content = generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades)
 
             # Afficher un bouton de téléchargement
-        st.download_button(
-            label="Download logs",
-            data=file_content,
-            file_name=f"{base_file_name}_logs.txt",
-            mime="text/plain"
+            st.download_button(
+                label="Download logs",
+                data=file_content,
+                file_name=f"{base_file_name}_logs.txt",
+                mime="text/plain"
             )        
                 # Générer un fichier CSV téléchargeable avec le nom original
-        
-        st.download_button(
+            csv_data = df_final.to_csv(index=False).encode(encodage)
+            st.download_button(
                     label="Download your file as CSV",
                     data=csv_data,
-                    file_name=f"{base_file_name}_zimport.csv",
+                    file_name=f"{base_file_name}_saines.csv",
                     mime="text/csv"
                 )
 
                 # Générer un fichier TXT téléchargeable avec le nom original
-        st.download_button(
+            txt_data = df_final.to_csv(index=False, sep=delimiter).encode(encodage)
+            st.download_button(
                     label="Download your file as TXT",
                     data=txt_data,
-                    file_name=f"{base_file_name}_zimport.txt",
+                    file_name=f"{base_file_name}_saines.txt",
                     mime="text/plain"
                 )
