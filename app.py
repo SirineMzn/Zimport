@@ -12,6 +12,8 @@ import io
 import random
 import bcrypt
 import time
+import tempfile
+import gc
 # Assurez-vous que votre clé OpenAI est dans les secrets de Streamlit
 openai.api_key = st.secrets["API_key"]["openai_api_key"]
 
@@ -407,6 +409,26 @@ if st.session_state.authenticated:
             st.success("No malformed rows detected!")
             return None, None
 
+    def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
+            content = "Summary of the file conversion:\n"
+            content += f"Total lines in the original file: {total_lines}\n"
+            content += f"Number of 'valid' lines: {nb_saines}\n"
+            content += f"Number of 'valid' lines after merging: {nb_saines_pi}\n"
+            content += f"Number of 'invalid' lines: {nb_malades}\n\n"
+            content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
+            content += "Logs after treatement:\n"
+            content += "Logs for Line Breaks Fixed:\n"
+            for ancien_index, nouveau_index in logs_pi:
+                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+            content += "\n"  # Ligne vide pour séparer les sections
+
+            content += "Logs for manual review:\n"
+            for ancien_index, nouveau_index in logs_sigma:
+                content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+
+            return content
+
 
 
     # Étape 1 : Affichage de l'uploader si aucun fichier n'est chargé
@@ -420,16 +442,17 @@ if st.session_state.authenticated:
             st.session_state.file_content = uploaded_file.read()
             st.session_state.file_extension = verifier_extension_fichier(uploaded_file.name)
             st.session_state.docs_loaded = True
-            
+            del uploaded_file
             st.rerun()
 
     # Étape 2 : Affichage et traitement après téléchargement du fichier
     if st.session_state.file_uploaded:
         st.write(f"### File Loaded: {st.session_state.file_name}")
         content = st.session_state.file_content
+        
         extension = st.session_state.file_extension
         base_file_name = remove_file_extension(st.session_state.file_name)
-
+        
         
         # Détecter l'encodage
         try:
@@ -446,17 +469,8 @@ if st.session_state.authenticated:
         number_lines = newlines[new_line]
             # Appeler la fonction pour détecter le délimiteur et obtenir le contenu modifié si nécessaire
         delimiter, sep_inexistant, modified_content = detect_delimiter(content, encodage)
-
-        # Vérifier si une conversion est nécessaire
-
-        # Si le fichier est un CSV, le convertir en TXT
-        if extension == '.csv':
-            # Utiliser `modified_content` pour la conversion
-            texte = convert_csv_to_txt(modified_content, sep_inexistant or delimiter, encodage, new_line)
-            delimiter = sep_inexistant or delimiter
-        else:
-            # Sinon, utiliser le contenu tel quel
-            texte = modified_content
+        del content
+        del decoded_content
 
         # Boutons pour télécharger ou réinitialiser
         if st.button("Clear File and Restart."):
@@ -468,6 +482,7 @@ if st.session_state.authenticated:
 
         # Découper le contenu en lignes
         lines = modified_content.splitlines()
+        del modified_content
         total_lines = len(lines)    
         # Initialiser les listes pour les lignes "saines" et "malades"
         saines = []
@@ -479,7 +494,6 @@ if st.session_state.authenticated:
         first_line = lines[0].split(delimiter)
         number = len(first_line)  # Nombre attendu de colonnes
         
-        most_common_count = number  # Utilisez la première ligne comme référence pour la structure
         # Initialiser les variables
         index = 1  # Commence après l'en-tête
         store_list = []
@@ -564,7 +578,7 @@ if st.session_state.authenticated:
                 st.warning(f"Unexpected case at line {index}. Skipping.")
                 old_index_buffer.clear()
                 index += 1
-        
+        del lines
         def déterminer_types(first_line, lignes_aleatoires):
             types = []
             prompt = (
@@ -603,64 +617,67 @@ if st.session_state.authenticated:
                 f"Invalid Rows: {nb_malades} (manual review required for rows with too many columns).")
         
         corrected_df,corrected=display_correction_table(malades, first_line,types)
-        if corrected :
-            # Convertir les lignes "saines" en DataFrame
+        df_saines = pd.DataFrame(saines, columns=first_line)
+        saines.clear()
+        if saines_pi:
             df_Pi = pd.DataFrame(saines_pi, columns=first_line)
-            df_sigma = pd.DataFrame(corrected, columns=first_line)
-            df_saines = pd.DataFrame(saines, columns=first_line)
-            df_final = pd.concat([df_saines,df_Pi,df_sigma],axis=0)
-                # Récupérer le nom de fichier original sans extension
-                    # Calculer les indices de départ
+            saines_pi.clear()
+
+            df_final = pd.concat([df_saines,df_Pi],axis=0)
+            df_saines = None
+            df_Pi = None
+            # Calculer les indices de départ
             start_index_pi = nb_saines + 1  # Commence après les lignes "saines"
-            start_index_sigma = nb_saines + nb_saines_pi + 1  # Commence après "saines" et "saines_pi"
 
             # Mettre à jour logs_pi (calcul automatique des nouveaux indices)
-            for i in range(len(logs_pi)):
-                ancien_index, nouveau_index = logs_pi[i]
-                if nouveau_index == 0:  # Si le nouveau index est 0, calculer
-                    logs_pi[i] = (ancien_index, start_index_pi)
-                    start_index_pi += 1  # Incrémenter le nouvel index
+            if logs_pi:
+                for i in range(len(logs_pi)):
+                    ancien_index, nouveau_index = logs_pi[i]
+                    if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                        logs_pi[i] = (ancien_index, start_index_pi)
+                        start_index_pi += 1  # Incrémenter le nouvel index
+        else : 
+            
+            df_final = df_saines
+            df_saines = None
+            logs_pi = None
+        if corrected :
+            # Convertir les lignes "saines" en DataFrame
+            df_sigma = pd.DataFrame(corrected, columns=first_line)
+            del corrected
 
-            # Mettre à jour logs_sigma (calcul automatique des nouveaux indices)
-            for i in range(len(logs_sigma)):
-                ancien_index, nouveau_index = logs_sigma[i]
-                if nouveau_index == 0:  # Si le nouveau index est 0, calculer
-                    logs_sigma[i] = (ancien_index, start_index_sigma)
-                    start_index_sigma += 1  # Incrémenter le nouvel index
+            df_final = pd.concat([df_final,df_sigma],axis=0)
 
-            def generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades):
-                content = "Summary of the file conversion:\n"
-                content += f"Total lines in the original file: {total_lines}\n"
-                content += f"Number of 'valid' lines: {nb_saines}\n"
-                content += f"Number of 'valid' lines after merging: {nb_saines_pi}\n"
-                content += f"Number of 'invalid' lines: {nb_malades}\n\n"
-                content += f"Number of lines in the new file: {total_lines - nb_malades}\n\n"
-                content += "Logs after treatement:\n"
-                content += "Logs for Line Breaks Fixed:\n"
-                for ancien_index, nouveau_index in logs_pi:
-                    content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
 
-                content += "\n"  # Ligne vide pour séparer les sections
+            df_final = None
+            df_sigma = None
 
-                content += "Logs for manual review:\n"
-                for ancien_index, nouveau_index in logs_sigma:
-                    content += f"Row: {ancien_index}, has became: {nouveau_index}\n"
+            
+            start_index_sigma = nb_saines + nb_saines_pi + 1  # Commence après "saines" et "saines_pi"
+            if logs_sigma:
+                # Mettre à jour logs_sigma (calcul automatique des nouveaux indices)
+                for i in range(len(logs_sigma)):
+                    ancien_index, nouveau_index = logs_sigma[i]
+                    if nouveau_index == 0:  # Si le nouveau index est 0, calculer
+                        logs_sigma[i] = (ancien_index, start_index_sigma)
+                        start_index_sigma += 1  # Incrémenter le nouvel index
 
-                return content
+        csv_data = df_final.to_csv(index=False).encode(encodage)
+        txt_data = df_final.to_csv(index=False, sep=delimiter).encode(encodage)
 
             # Générer le contenu du fichier texte
-            file_content = generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades)
+        file_content = generate_log_file(logs_pi, logs_sigma,total_lines,nb_saines,nb_saines_pi,nb_malades)
 
             # Afficher un bouton de téléchargement
-            st.download_button(
-                label="Download logs",
-                data=file_content,
-                file_name=f"{base_file_name}_logs.txt",
-                mime="text/plain"
+        st.download_button(
+            label="Download logs",
+            data=file_content,
+            file_name=f"{base_file_name}_logs.txt",
+            mime="text/plain"
             )        
                 # Générer un fichier CSV téléchargeable avec le nom original
-            csv_data = df_final.to_csv(index=False).encode(encodage)
-            st.download_button(
+        
+        st.download_button(
                     label="Download your file as CSV",
                     data=csv_data,
                     file_name=f"{base_file_name}_zimport.csv",
@@ -668,8 +685,7 @@ if st.session_state.authenticated:
                 )
 
                 # Générer un fichier TXT téléchargeable avec le nom original
-            txt_data = df_final.to_csv(index=False, sep=delimiter).encode(encodage)
-            st.download_button(
+        st.download_button(
                     label="Download your file as TXT",
                     data=txt_data,
                     file_name=f"{base_file_name}_zimport.txt",
