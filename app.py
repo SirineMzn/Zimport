@@ -14,8 +14,8 @@ import time
 import gc
 import csv
 openai.api_key = st.secrets["API_key"]["openai_api_key"]
-UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "/zimport/uploads")
-DATA_FOLDER = os.getenv("DATA_FOLDER", "/zimport/data")
+UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", "./uploads")
+DATA_FOLDER = os.getenv("DATA_FOLDER", "./data")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_FOLDER, exist_ok=True)
 uploads = os.listdir(UPLOAD_FOLDER)
